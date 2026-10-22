@@ -3,16 +3,15 @@ import { STARTERS } from './starters.js';
 
 const WEBLLM_URL = 'https://esm.run/@mlc-ai/web-llm@0.2.86';
 export const MODELS = [
-  // Default model, modeled on the Odysseus project (github.com/odysseus-dev/odysseus):
-  // a free on-device base model plus an Odysseus-style guidance layer.
-  { id: 'odysseus', base: 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC', label: 'Odysseus — default, free, on-device (about 0.4 GB)',
+  // Only models without heavy refusal training, so characters are written as the creator intends.
+  // Default: Odysseus guidance layer on the Hermes 3 base (Nous Research, built to follow the user's system prompt).
+  { id: 'odysseus', base: 'Hermes-3-Llama-3.2-3B-q4f16_1-MLC', label: 'Odysseus — default, free, on-device (about 2.3 GB)',
     guide: 'Keep the thread of the conversation and center what the user actually wants. Be clear and composed: vivid but never rambling, '
       + 'wise but never vague. Remember earlier details and stay consistent with them. Answer in a few sentences unless asked for more.' },
-  { id: 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC', label: 'Qwen 2.5 1.5B — balanced (about 1 GB)' },
-  { id: 'Llama-3.2-1B-Instruct-q4f16_1-MLC', label: 'Llama 3.2 1B — fastest (about 0.9 GB)' },
-  { id: 'Llama-3.2-3B-Instruct-q4f16_1-MLC', label: 'Llama 3.2 3B — smarter (about 2.3 GB)' },
-  { id: 'Hermes-3-Llama-3.2-3B-q4f16_1-MLC', label: 'Hermes 3 3B — best for roleplay (about 2.3 GB)' },
-  { id: 'Phi-3.5-mini-instruct-q4f16_1-MLC', label: 'Phi 3.5 mini — strongest (about 3.7 GB)' },
+  { id: 'Hermes-3-Llama-3.2-3B-q4f16_1-MLC', label: 'Hermes 3 3B — roleplay (about 2.3 GB)' },
+  { id: 'Hermes-3-Llama-3.1-8B-q4f16_1-MLC', label: 'Hermes 3 8B — smartest roleplay, needs a strong GPU (about 4.9 GB)' },
+  { id: 'OpenHermes-2.5-Mistral-7B-q4f16_1-MLC', label: 'OpenHermes 2.5 7B — creative writing (about 4.6 GB)' },
+  { id: 'Mistral-7B-Instruct-v0.3-q4f16_1-MLC', label: 'Mistral 7B — lightly moderated (about 4.6 GB)' },
 ];
 
 // ---------- storage ----------
@@ -20,7 +19,7 @@ const KEY = { chars: 'mm.characters', chats: 'mm.chats', settings: 'mm.settings'
 const load = (k, fallback) => { try { return JSON.parse(localStorage.getItem(k)) ?? fallback; } catch { return fallback; } };
 const save = (k, v) => localStorage.setItem(k, JSON.stringify(v));
 const modelInfo = (id) => MODELS.find((m) => m.id === id) || { id, base: id };
-const settings = () => ({ model: MODELS[0].id, temperature: 0.8, speak: false, userName: 'You', theme: 'midnight', persona: '', ...load(KEY.settings, {}) });
+const settings = () => { const s = { model: MODELS[0].id, temperature: 0.8, speak: false, userName: 'You', theme: 'midnight', persona: '', ...load(KEY.settings, {}) }; if (!MODELS.some((m) => m.id === s.model)) s.model = MODELS[0].id; return s; };
 const myCharacters = () => load(KEY.chars, []);
 const allCharacters = () => [...myCharacters(), ...STARTERS];
 const findCharacter = (id) => allCharacters().find((c) => c.id === id);
