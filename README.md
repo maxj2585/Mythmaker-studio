@@ -8,7 +8,7 @@ Create AI characters with a personality, backstory, speaking style and voice, th
 - **Chat** with streaming replies, per-character history, Stop, and optional spoken replies (browser speech).
 - **Share links** that carry a character in the URL, plus JSON import/export.
 - **Game-engine export**: a simple NPC JSON (system prompt, greeting, voice) for Unity, Unreal or Godot.
-- **Model picker**: Odysseus (default, free, on-device; modeled on the [Odysseus](https://github.com/odysseus-dev/odysseus) project with a Qwen 2.5 0.5B base), Qwen 2.5 1.5B, Llama 3.2 1B/3B, Hermes 3 3B, Phi 3.5 mini.
+- **Model picker**: only models without heavy refusal training: Odysseus (default; Odysseus-style guidance on Hermes 3 3B), Hermes 3 3B, Hermes 3 8B, OpenHermes 2.5 Mistral 7B, Mistral 7B v0.3.
 
 ## Inspired by Shapes (original code)
 - **Group chats** with up to five characters, who answer you and each other.
