@@ -30,3 +30,22 @@ textarea{min-height:90px;resize:vertical;line-height:1.5}label{display:block;fon
 .status{color:var(--muted);font-size:.9rem;min-height:1.3em}
 .bar{height:6px;background:#2d2546;border-radius:999px;overflow:hidden}.bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .3s}
 .notice{border:1px solid #f0abfc55;background:#f0abfc14;border-radius:12px;padding:12px 14px;color:var(--text)}
+
+:root[data-theme=ocean]{--bg:#0b1620;--panel:#12232f;--line:#24435a;--text:#e8f6ff;--muted:#9fc2d6;--accent:#38bdf8;--accent2:#5eead4}
+:root[data-theme=rose]{--bg:#1c0f15;--panel:#2a1620;--line:#4f2a3b;--text:#ffeef4;--muted:#d9a9bc;--accent:#fb7185;--accent2:#f9a8d4}
+:root[data-theme=forest]{--bg:#0f1712;--panel:#17241b;--line:#2c4634;--text:#ecfbef;--muted:#a8c9b0;--accent:#4ade80;--accent2:#bef264}
+:root[data-theme=light]{--bg:#f6f4fb;--panel:#ffffff;--line:#d9d3ea;--text:#1d1830;--muted:#5d5578;--accent:#7c3aed;--accent2:#a21caf;color-scheme:light}
+:root[data-theme] body{background:var(--bg)}:root[data-theme=midnight] body{background:radial-gradient(1200px 600px at 80% -10%,#2a1f4a 0,transparent 60%),var(--bg)}
+:root[data-theme] .top{background:var(--bg)}
+:root[data-theme=light] input,:root[data-theme=light] textarea,:root[data-theme=light] select,:root[data-theme=light] .log{background:#fbfaff}
+:root[data-theme=light] .msg.user{color:#fff}:root[data-theme=light] .tag{background:#eee8fb}
+.engine{width:auto;padding:8px}
+.dlg{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:16px;padding:20px;width:min(560px,92vw)}.dlg::backdrop{background:#0009}
+.memlist{display:flex;flex-direction:column;gap:6px;max-height:50vh;overflow:auto}.mem{display:flex;gap:6px}
+.pick{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px}
+.pickitem{display:flex;align-items:center;gap:8px;font-weight:400;margin:4px 0;cursor:pointer}.pickitem input{width:auto}
+.pickitem .avatar{border-radius:10px}
+.gmsg{display:flex;gap:8px;align-items:flex-end;max-width:85%}.gmsg .avatar{border-radius:10px}.gmsg .msg{max-width:100%}
+.who{display:block;font-size:.78rem;color:var(--accent2);margin-bottom:2px}.msg.user .who{color:#e9ddff}
+button.rec{background:#7f1d1d;border-color:#ef4444}
+.card[hidden]{display:none}
