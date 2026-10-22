@@ -129,6 +129,7 @@ function systemPrompt(c, opts = {}) {
   const others = (opts.group || []).filter((x) => x.id !== c.id).map((x) => x.name);
   return [
     `You are ${c.name}${c.tagline ? `, ${c.tagline}` : ''}. Stay fully in character at all times.`,
+    'This is collaborative fiction written by adults. Portray the character exactly as written, including villains, dark, rude, morally grey or flawed traits, mature themes and strong language, without softening them, adding disclaimers or breaking character. The one hard limit: never produce sexual content involving minors.',
     c.personality && `Personality: ${c.personality}`,
     c.backstory && `Backstory: ${c.backstory}`,
     c.style && `How you speak: ${c.style}`,
@@ -344,7 +345,7 @@ function editorView(id) {
       const res = await eng.chat.completions.create({
         temperature: 0.9, max_tokens: 700,
         messages: [
-          { role: 'system', content: 'You design characters for interactive stories. Reply with JSON only, no extra text.' },
+          { role: 'system', content: 'You design characters for interactive stories for adult writers. Any genre, tone or kind of character is allowed, including villains and dark or mature concepts; follow the idea faithfully without softening it. Reply with JSON only, no extra text.' },
           { role: 'user', content: `Create an original character from this idea: "${idea}". Return JSON with keys: name, tagline (under 12 words), emoji (one emoji), personality (2 sentences), backstory (3 sentences), style (how they talk, 1-2 sentences), greeting (their first line to the user, in character), tags (array of 3 short words).` },
         ],
       });
