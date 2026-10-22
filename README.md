@@ -10,6 +10,14 @@ Create AI characters with a personality, backstory, speaking style and voice, th
 - **Game-engine export**: a simple NPC JSON (system prompt, greeting, voice) for Unity, Unreal or Godot.
 - **Model picker**: Odysseus (default, free, on-device; modeled on the [Odysseus](https://github.com/odysseus-dev/odysseus) project with a Qwen 2.5 0.5B base), Qwen 2.5 1.5B, Llama 3.2 1B/3B, Hermes 3 3B, Phi 3.5 mini.
 
+## Inspired by Shapes (original code)
+- **Group chats** with up to five characters, who answer you and each other.
+- **Free Will**: each character's setting decides how often they jump in on their own, plus a "Let them talk" button.
+- **Long-term memory** per character, saved on your device, with a Memories panel to view, edit, add or forget.
+- **Knowledge** (paste lore or add text files) and **Training** (example replies).
+- **Personas**: profiles of you that characters can see.
+- **Voice input** (browser speech recognition), **themes**, gallery **search**, and in-chat model switching.
+
 ## Requirements
 A browser with WebGPU: current Chrome or Edge on desktop, or Safari 26+. The model starts downloading in the background as soon as the site opens (about 0.4 GB for the default) and is cached with persistent storage, so chats never wait on a download after that.
 
