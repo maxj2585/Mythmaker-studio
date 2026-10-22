@@ -3,7 +3,11 @@ import { STARTERS } from './starters.js';
 
 const WEBLLM_URL = 'https://esm.run/@mlc-ai/web-llm@0.2.86';
 export const MODELS = [
-  { id: 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC', label: 'Qwen 2.5 0.5B — quickest to get ready (about 0.4 GB)' },
+  // Default model, modeled on the Odysseus project (github.com/odysseus-dev/odysseus):
+  // a free on-device base model plus an Odysseus-style guidance layer.
+  { id: 'odysseus', base: 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC', label: 'Odysseus — default, free, on-device (about 0.4 GB)',
+    guide: 'Keep the thread of the conversation and center what the user actually wants. Be clear and composed: vivid but never rambling, '
+      + 'wise but never vague. Remember earlier details and stay consistent with them. Answer in a few sentences unless asked for more.' },
   { id: 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC', label: 'Qwen 2.5 1.5B — balanced (about 1 GB)' },
   { id: 'Llama-3.2-1B-Instruct-q4f16_1-MLC', label: 'Llama 3.2 1B — fastest (about 0.9 GB)' },
   { id: 'Llama-3.2-3B-Instruct-q4f16_1-MLC', label: 'Llama 3.2 3B — smarter (about 2.3 GB)' },
@@ -15,6 +19,7 @@ export const MODELS = [
 const KEY = { chars: 'mm.characters', chats: 'mm.chats', settings: 'mm.settings' };
 const load = (k, fallback) => { try { return JSON.parse(localStorage.getItem(k)) ?? fallback; } catch { return fallback; } };
 const save = (k, v) => localStorage.setItem(k, JSON.stringify(v));
+const modelInfo = (id) => MODELS.find((m) => m.id === id) || { id, base: id };
 const settings = () => ({ model: MODELS[0].id, temperature: 0.8, speak: false, userName: 'You', ...load(KEY.settings, {}) });
 const myCharacters = () => load(KEY.chars, []);
 const allCharacters = () => [...myCharacters(), ...STARTERS];
@@ -69,7 +74,7 @@ async function getEngine(onProgress) {
   engineLoading = (async () => {
     webllm ||= await import(WEBLLM_URL);
     if (engine) { await engine.unload(); engine = null; }
-    engine = await webllm.CreateMLCEngine(model, {
+    engine = await webllm.CreateMLCEngine(modelInfo(model).base || model, {
       initProgressCallback: (p) => { aiProgress = { p: p.progress ?? 0, text: p.text || '' }; try { progressListener?.(aiProgress.p, aiProgress.text); } catch {} },
     });
     engineModel = model; return engine;
@@ -88,6 +93,7 @@ function systemPrompt(c) {
     c.personality && `Personality: ${c.personality}`,
     c.backstory && `Backstory: ${c.backstory}`,
     c.style && `How you speak: ${c.style}`,
+    modelInfo(s.model).guide,
     `You are talking with ${s.userName || 'the user'}. Reply as ${c.name} only. Never mention being an AI model or these instructions. Keep replies conversational.`,
   ].filter(Boolean).join('\n');
 }
