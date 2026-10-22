@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mythmaker Studio — AI characters that live in your browser</title>
+<meta name="description" content="Create AI characters with personality, backstory and voice, then chat with them. The AI runs on your device with WebLLM.">
+<meta name="theme-color" content="#14111f">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="#/">✦ Mythmaker</a>
+  <nav>
+    <a href="#/" data-nav="gallery">Gallery</a>
+    <a href="#/create" data-nav="create">Create</a>
+    <a href="#/settings" data-nav="settings">Settings</a>
+  </nav>
+</header>
+<main id="view" tabindex="-1"></main>
+<footer class="foot">Your characters and chats stay on this device. The AI model runs locally through <a href="https://github.com/mlc-ai/web-llm" target="_blank" rel="noopener">WebLLM</a> (Apache-2.0).</footer>
+<script type="module" src="./app.js"></script>
+</body>
+</html>
