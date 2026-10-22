@@ -26,3 +26,7 @@ Any static server works: `python3 -m http.server 8080`, then open http://localho
 
 ## Credits
 Original code, MIT licensed. WebLLM by MLC AI is Apache-2.0 and is loaded from a CDN at runtime.
+
+## Rooms (chat with real people)
+
+Rooms let several people chat live with each other and with characters. Messages are stored in Firebase Realtime Database (free Spark plan). One person's device runs the AI for the room; anyone can take over with **Run the AI here**. Config lives in `firebase-config.js`.
