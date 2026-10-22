@@ -3,6 +3,7 @@ import { STARTERS } from './starters.js';
 
 const WEBLLM_URL = 'https://esm.run/@mlc-ai/web-llm@0.2.86';
 export const MODELS = [
+  { id: 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC', label: 'Qwen 2.5 0.5B — quickest to get ready (about 0.4 GB)' },
   { id: 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC', label: 'Qwen 2.5 1.5B — balanced (about 1 GB)' },
   { id: 'Llama-3.2-1B-Instruct-q4f16_1-MLC', label: 'Llama 3.2 1B — fastest (about 0.9 GB)' },
   { id: 'Llama-3.2-3B-Instruct-q4f16_1-MLC', label: 'Llama 3.2 3B — smarter (about 2.3 GB)' },
@@ -54,20 +55,31 @@ function download(name, text) {
 
 // ---------- on-device AI (WebLLM) ----------
 let engine = null, engineModel = null, engineLoading = null, webllm = null;
+// The model starts loading in the background as soon as the site opens, so it is
+// ready before the first chat. Views can watch progress with onAIProgress.
+let aiProgress = { p: 0, text: 'Getting the AI ready…' }, progressListener = null;
+const onAIProgress = (fn) => { progressListener = fn; if (fn && engineLoading) try { fn(aiProgress.p, aiProgress.text); } catch {} };
+const aiReady = () => !!engine && engineModel === settings().model && !engineLoading;
 const hasWebGPU = () => 'gpu' in navigator;
 async function getEngine(onProgress) {
   const model = settings().model;
+  if (onProgress) onAIProgress(onProgress);
   if (engine && engineModel === model) return engine;
   if (engineLoading) return engineLoading;
   engineLoading = (async () => {
     webllm ||= await import(WEBLLM_URL);
     if (engine) { await engine.unload(); engine = null; }
     engine = await webllm.CreateMLCEngine(model, {
-      initProgressCallback: (p) => onProgress?.(p.progress ?? 0, p.text || ''),
+      initProgressCallback: (p) => { aiProgress = { p: p.progress ?? 0, text: p.text || '' }; try { progressListener?.(aiProgress.p, aiProgress.text); } catch {} },
     });
     engineModel = model; return engine;
   })();
   try { return await engineLoading; } finally { engineLoading = null; }
+}
+function preloadAI() {
+  if (!hasWebGPU()) return;
+  navigator.storage?.persist?.().catch(() => {}); // keep the downloaded model from being cleared
+  getEngine().then(() => { try { progressListener?.(1, 'ready'); } catch {} }).catch((err) => console.warn('AI preload failed', err));
 }
 function systemPrompt(c) {
   const s = settings();
@@ -251,7 +263,7 @@ function chatView(id) {
         <button id="shareBtn">Share</button><button id="resetBtn">New chat</button></div>
       <div class="log" id="log" aria-live="polite"></div>
       <div>
-        <div class="bar"><i id="bar"></i></div><p class="status" id="status">${hasWebGPU() ? 'The model loads on your first message.' : 'This browser has no WebGPU, so chat cannot run here.'}</p>
+        <div class="bar"><i id="bar"></i></div><p class="status" id="status">${!hasWebGPU() ? 'This browser has no WebGPU, so chat cannot run here.' : aiReady() ? '' : 'Getting the AI ready…'}</p>
         <form class="composer" id="composer"><textarea id="input" placeholder="Message ${esc(c.name)}…" ${hasWebGPU() ? '' : 'disabled'}></textarea><button class="primary" id="send" ${hasWebGPU() ? '' : 'disabled'}>Send</button><button type="button" id="stop" hidden>Stop</button></form>
       </div>
     </section>`;
@@ -261,6 +273,11 @@ function chatView(id) {
     log.scrollTop = log.scrollHeight;
   };
   render();
+  if (hasWebGPU() && !aiReady()) onAIProgress((p, t) => {
+    if (!$view.contains(status)) return;
+    $view.querySelector('#bar').style.width = t === 'ready' ? '0%' : `${Math.round(p * 100)}%`;
+    status.textContent = t === 'ready' ? `${c.name} is ready to chat.` : t;
+  });
   $view.querySelector('#speakToggle').onchange = (e) => save(KEY.settings, { ...settings(), speak: e.target.checked });
   $view.querySelector('#resetBtn').onclick = () => { if (!confirm('Start a new chat? This clears the current one.')) return; msgs = c.greeting ? [{ role: 'assistant', content: c.greeting }] : []; setChat(id, msgs); render(); };
   $view.querySelector('#shareBtn').onclick = async () => {
@@ -319,7 +336,7 @@ function settingsView() {
   $view.innerHTML = `
     <h1>Settings</h1>
     <form class="panel" id="sform">
-      <label for="model">AI model <span class="hint">Downloads once, then loads from your browser cache.</span></label>
+      <label for="model">AI model <span class="hint">Starts loading when the site opens and is saved in your browser, so chats never wait on a download after the first visit.</span></label>
       <select id="model">${MODELS.map((m) => `<option value="${m.id}" ${m.id === s.model ? 'selected' : ''}>${esc(m.label)}</option>`).join('')}</select>
       <label for="temp">Creativity <span class="hint" id="tempV">${s.temperature}</span></label>
       <input id="temp" type="range" min="0.1" max="1.4" step="0.05" value="${s.temperature}">
@@ -334,7 +351,7 @@ function settingsView() {
     </div>`;
   const q = (k) => $view.querySelector('#' + k);
   q('temp').oninput = () => q('tempV').textContent = q('temp').value;
-  q('sform').onsubmit = (e) => { e.preventDefault(); save(KEY.settings, { ...settings(), model: q('model').value, temperature: Number(q('temp').value), userName: q('uname').value.trim() || 'You' }); q('sstatus').textContent = 'Saved.'; };
+  q('sform').onsubmit = (e) => { e.preventDefault(); save(KEY.settings, { ...settings(), model: q('model').value, temperature: Number(q('temp').value), userName: q('uname').value.trim() || 'You' }); q('sstatus').textContent = 'Saved.'; if (!aiReady()) preloadAI(); };
   q('backup').onclick = () => download('mythmaker-backup.json', JSON.stringify({ characters: myCharacters(), chats: load(KEY.chats, {}) }, null, 2));
   q('wipe').onclick = () => { if (confirm('Delete every character and chat you made? This cannot be undone.')) { localStorage.removeItem(KEY.chars); localStorage.removeItem(KEY.chats); q('sstatus').textContent = 'Deleted.'; } };
 }
@@ -354,3 +371,4 @@ function route() {
 }
 window.addEventListener('hashchange', route);
 route();
+preloadAI();
