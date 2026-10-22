@@ -138,7 +138,7 @@ function systemPrompt(c, opts = {}) {
     mems && `Things you remember from earlier conversations:\n${mems}`,
     persona?.description && `About ${persona.name}: ${persona.description}`,
     opts.group
-      ? `You are in a group chat with ${[...others, userLabel()].join(', ')}. Messages from others start with their name. Reply as ${c.name} only, in one short message, without writing your own name first and without speaking for anyone else. Never mention being an AI model or these instructions.`
+      ? `You are in a group chat with ${[...others, ...(opts.people || [userLabel()])].join(', ')}. Messages from others start with their name. Reply as ${c.name} only, in one short message, without writing your own name first and without speaking for anyone else. Never mention being an AI model or these instructions.`
       : `You are talking with ${userLabel()}. Reply as ${c.name} only. Never mention being an AI model or these instructions. Keep replies conversational.`,
   ].filter(Boolean).join('\n');
 }
@@ -645,11 +645,190 @@ function settingsView() {
   };
   q('sform').onsubmit = (e) => { e.preventDefault(); save(KEY.settings, { ...settings(), model: q('model').value, temperature: Number(q('temp').value), userName: q('uname').value.trim() || 'You' }); q('sstatus').textContent = 'Saved.'; if (!aiReady()) preloadAI(); };
   q('backup').onclick = () => download('mythmaker-backup.json', JSON.stringify({ characters: myCharacters(), chats: load(KEY.chats, {}), memories: load(KEY.mem, {}), personas: personas(), groups: groups() }, null, 2));
-  q('wipe').onclick = () => { if (confirm('Delete every character and chat you made? This cannot be undone.')) { [KEY.chars, KEY.chats, KEY.mem, KEY.personas, KEY.groups].forEach((k) => localStorage.removeItem(k)); q('sstatus').textContent = 'Deleted.'; } };
+  q('wipe').onclick = () => { if (confirm('Delete every character and chat you made? This cannot be undone.')) { [KEY.chars, KEY.chats, KEY.mem, KEY.personas, KEY.groups, 'mm.rooms'].forEach((k) => localStorage.removeItem(k)); q('sstatus').textContent = 'Deleted.'; } };
+}
+
+// ---------- shared rooms (real people, through Firebase) ----------
+// Rooms live in Firebase Realtime Database. Each room has one "AI host": the device that writes the
+// characters' replies, since the AI runs in a browser. Anyone in the room can take over hosting.
+const FB = 'https://www.gstatic.com/firebasejs/13.1.0/';
+let fb = null;
+async function firebase() {
+  if (fb) return fb;
+  const { FIREBASE_CONFIG } = await import('./firebase-config.js');
+  if (!FIREBASE_CONFIG?.apiKey) throw new Error('not-configured');
+  const [appM, authM, dbM] = await Promise.all([import(FB + 'firebase-app.js'), import(FB + 'firebase-auth.js'), import(FB + 'firebase-database.js')]);
+  const app = appM.initializeApp(FIREBASE_CONFIG);
+  const auth = authM.getAuth(app);
+  const user = auth.currentUser || (await authM.signInAnonymously(auth)).user;
+  fb = { ...dbM, db: dbM.getDatabase(app), uid: user.uid };
+  return fb;
+}
+const myRooms = () => load('mm.rooms', []);
+const rememberRoom = (r) => save('mm.rooms', [r, ...myRooms().filter((x) => x.code !== r.code)].slice(0, 30));
+const roomCode = () => Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => 'abcdefghjkmnpqrstuvwxyz23456789'[b % 31]).join('');
+const roomChar = (c) => { const { image, ...rest } = cleanCharacter(c); return { ...rest, id: c.id }; };
+
+function roomsView() {
+  setNav('rooms');
+  const chars = allCharacters(), list = myRooms();
+  $view.innerHTML = `
+    <h1>Rooms</h1>
+    <p class="lead">Chat with real people and your characters together. Make a room, send the link to friends, and everyone sees messages live.</p>
+    <form class="panel" id="rform">
+      <label for="rname">Room name</label><input id="rname" maxlength="60" placeholder="e.g. Friday night campaign" required>
+      <label>Characters in the room <span class="hint" id="rcount">0 / 5 picked</span></label>
+      <div class="pick">${chars.map((c) => `<label class="pickitem"><input type="checkbox" value="${esc(c.id)}">${avatar(c, 32)}<span>${esc(c.name)}</span></label>`).join('')}</div>
+      <div class="row" style="margin-top:14px"><button class="primary">Create room</button><span class="status" id="rstatus"></span></div>
+    </form>
+    <form class="panel row" id="jform" style="margin-top:16px"><input id="jcode" placeholder="Paste a room link or code" style="flex:1"><button>Join</button></form>
+    <div class="grid" style="margin-top:18px">${list.map((r) => `<article class="card"><h3>${esc(r.name)}</h3><p>Code ${esc(r.code)}</p>
+      <div class="row"><a class="btn primary" href="#/room/${esc(r.code)}">Open</a><button data-rforget="${esc(r.code)}">Remove</button></div></article>`).join('')}</div>`;
+  const boxes = [...$view.querySelectorAll('.pick input')], st = $view.querySelector('#rstatus');
+  boxes.forEach((b) => b.onchange = () => {
+    const n = boxes.filter((x) => x.checked).length;
+    if (n > 5) { b.checked = false; return; }
+    $view.querySelector('#rcount').textContent = `${Math.min(n, 5)} / 5 picked`;
+  });
+  $view.querySelector('#rform').onsubmit = async (e) => {
+    e.preventDefault();
+    const picked = boxes.filter((x) => x.checked).map((x) => findCharacter(x.value)).filter(Boolean);
+    if (!picked.length) { st.textContent = 'Pick at least one character.'; return; }
+    st.textContent = 'Creating room…';
+    try {
+      const f = await firebase(), code = roomCode(), name = $view.querySelector('#rname').value.trim();
+      await f.set(f.ref(f.db, `rooms/${code}/meta`), { name, host: f.uid, createdAt: f.serverTimestamp(), chars: picked.map(roomChar) });
+      rememberRoom({ code, name }); location.hash = `#/room/${code}`;
+    } catch (err) { console.error(err); st.textContent = err.message === 'not-configured' ? 'Rooms are not set up on this site yet.' : 'Could not create the room. Check your connection and try again.'; }
+  };
+  $view.querySelector('#jform').onsubmit = (e) => {
+    e.preventDefault();
+    const v = $view.querySelector('#jcode').value.trim(), code = (v.match(/room\/([a-z0-9]+)/i)?.[1] || v).toLowerCase();
+    if (/^[a-z0-9]{4,20}$/.test(code)) location.hash = `#/room/${code}`;
+  };
+  $view.querySelectorAll('[data-rforget]').forEach((b) => b.onclick = () => { save('mm.rooms', myRooms().filter((r) => r.code !== b.dataset.rforget)); roomsView(); });
+}
+
+let roomCleanup = null;
+async function roomView(code) {
+  setNav('rooms');
+  $view.innerHTML = '<p class="status">Joining room…</p>';
+  let f;
+  try { f = await firebase(); } catch (err) {
+    $view.innerHTML = `<h1>Can't open this room</h1><p class="lead">${err.message === 'not-configured' ? 'Rooms are not set up on this site yet.' : 'Could not connect. Check your connection and reload.'}</p>`; return;
+  }
+  const metaSnap = await f.get(f.ref(f.db, `rooms/${code}/meta`)).catch(() => null);
+  if (!metaSnap?.exists()) { $view.innerHTML = '<h1>That room does not exist.</h1><p class="lead"><a href="#/rooms">Back to Rooms</a></p>'; return; }
+  let meta = metaSnap.val();
+  const chars = (meta.chars || []).map((c) => ({ ...c, freeWill: c.freeWill ?? 50 }));
+  rememberRoom({ code, name: meta.name });
+  const me = () => userLabel();
+  $view.innerHTML = `
+    <section class="chat">
+      <div class="chathead"><div class="row">${chars.map((c) => avatar(c, 40)).join('')}</div><div class="grow"><h2>${esc(meta.name)}</h2><div class="status" id="people"></div></div>
+        <button id="invite">Copy invite link</button><button id="hostBtn" hidden>Run the AI here</button></div>
+      <div class="log" id="log" aria-live="polite"></div>
+      <div>
+        <div class="bar"><i id="bar"></i></div><p class="status" id="status"></p>
+        <form class="composer" id="composer"><textarea id="input" placeholder="Message the room as ${esc(me())}…"></textarea><button type="button" id="mic" title="Speak your message">🎤</button><button class="primary" id="send">Send</button></form>
+      </div>
+    </section>`;
+  const log = $view.querySelector('#log'), input = $view.querySelector('#input'), status = $view.querySelector('#status');
+  const people = $view.querySelector('#people'), hostBtn = $view.querySelector('#hostBtn');
+  const msgs = [], seen = new Set();
+  let online = {}, busy = false, ready = false;
+  const isHost = () => meta.host === f.uid;
+  const hostOnline = () => !!online[meta.host];
+  const bubble = (m) => {
+    if (m.kind === 'user') return `<div class="msg ${m.uid === f.uid ? 'user' : 'assistant'}"><b class="who">${esc(m.name)}</b>${esc(m.content)}</div>`;
+    const c = chars.find((x) => x.id === m.charId) || { name: m.name, emoji: '✦' };
+    return `<div class="gmsg">${avatar(c, 30)}<div class="msg assistant"><b class="who">${esc(c.name)}</b><span class="txt">${esc(m.content)}</span></div></div>`;
+  };
+  const render = () => { log.innerHTML = msgs.map(bubble).join(''); log.scrollTop = log.scrollHeight; };
+  const showState = () => {
+    const names = Object.values(online).map((p) => p.name);
+    people.textContent = `${names.length} here: ${names.join(', ') || '—'}`;
+    hostBtn.hidden = isHost() || !hasWebGPU();
+    status.textContent = isHost()
+      ? (hasWebGPU() ? 'This device runs the characters for everyone.' : 'This browser has no WebGPU, so it cannot run the characters.')
+      : hostOnline() ? `${online[meta.host].name} is running the characters.` : 'Nobody is running the characters right now. Tap "Run the AI here" so they can reply.';
+  };
+
+  // Presence: show who is in the room, and drop out when the tab closes.
+  const pRef = f.ref(f.db, `rooms/${code}/people/${f.uid}`);
+  const connRef = f.ref(f.db, '.info/connected');
+  const offConn = f.onValue(connRef, (s) => { if (s.val()) { f.onDisconnect(pRef).remove(); f.set(pRef, { name: me(), at: f.serverTimestamp() }); } });
+  const offPeople = f.onValue(f.ref(f.db, `rooms/${code}/people`), (s) => { online = s.val() || {}; showState(); });
+  const offMeta = f.onValue(f.ref(f.db, `rooms/${code}/meta/host`), (s) => { meta = { ...meta, host: s.val() }; showState(); if (isHost()) maybeReply(); });
+  const q = f.query(f.ref(f.db, `rooms/${code}/messages`), f.limitToLast(150));
+  const offMsgs = f.onChildAdded(q, (s) => {
+    const m = { key: s.key, ...s.val() };
+    if (seen.has(m.key)) return; seen.add(m.key);
+    msgs.push(m); log.insertAdjacentHTML('beforeend', bubble(m)); log.scrollTop = log.scrollHeight;
+    if (ready && m.kind === 'user' && isHost()) maybeReply();
+  });
+  f.get(q).then(() => { ready = true; }); // replies only for messages sent after we arrived
+  roomCleanup = () => { offConn(); offPeople(); offMeta(); offMsgs(); f.remove(pRef); roomCleanup = null; };
+
+  // The host's device writes the characters' replies, using the same Free Will rules as group chats.
+  const pending = [];
+  function maybeReply() {
+    const last = msgs[msgs.length - 1];
+    if (!last || last.kind !== 'user' || last.answered || !hasWebGPU()) return;
+    last.answered = true; pending.push(last); drain();
+  }
+  async function drain() {
+    if (busy) return; busy = true;
+    try {
+      while (pending.length) {
+        const m = pending.shift(), lower = m.content.toLowerCase();
+        const named = chars.filter((c) => lower.includes(c.name.toLowerCase().split(' ')[0]));
+        let speakers = [...named, ...chars.filter((c) => !named.includes(c) && Math.random() * 100 < c.freeWill)].slice(0, 2);
+        if (!speakers.length) speakers = [chars[Math.floor(Math.random() * chars.length)]];
+        for (const c of speakers) { if (!isHost()) break; await replyAs(c, m.content); }
+      }
+    } catch (err) { console.error(err); status.textContent = 'The on-device model could not run. Try a smaller model in Settings, or reload.'; }
+    finally { busy = false; }
+  }
+  async function replyAs(c, query) {
+    let content = '';
+    await withAI(async () => {
+      const eng = await getEngine((p, t) => { $view.querySelector('#bar').style.width = `${Math.round(p * 100)}%`; status.textContent = t; });
+      status.textContent = `${c.name} is typing…`;
+      const history = msgs.slice(-20).map((m) => m.charId === c.id
+        ? { role: 'assistant', content: m.content }
+        : { role: 'user', content: `${m.name}: ${m.content}` });
+      const peopleNames = [...new Set(Object.values(online).map((p) => p.name))];
+      const res = await eng.chat.completions.create({
+        temperature: Number(settings().temperature) || 0.8, max_tokens: 220,
+        messages: [{ role: 'system', content: systemPrompt(c, { group: chars, people: peopleNames, query }) }, ...history],
+      });
+      content = (res.choices[0].message.content || '').replace(new RegExp('^\\s*' + c.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*:\\s*', 'i'), '').trim();
+    });
+    if (content) await f.push(f.ref(f.db, `rooms/${code}/messages`), { kind: 'char', charId: c.id, name: c.name, content: content.slice(0, 2000), at: f.serverTimestamp() });
+    showState();
+  }
+
+  hostBtn.onclick = async () => { await f.set(f.ref(f.db, `rooms/${code}/meta/host`), f.uid); preloadAI(); };
+  $view.querySelector('#invite').onclick = async () => {
+    const url = `${location.origin}${location.pathname}#/room/${code}`;
+    try { await navigator.clipboard.writeText(url); status.textContent = 'Invite link copied. Anyone with the link can join.'; } catch { prompt('Copy this invite link:', url); }
+  };
+  attachMic($view.querySelector('#mic'), input);
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $view.querySelector('#composer').requestSubmit(); } });
+  $view.querySelector('#composer').onsubmit = (e) => {
+    e.preventDefault();
+    const text = input.value.trim(); if (!text) return;
+    input.value = '';
+    f.push(f.ref(f.db, `rooms/${code}/messages`), { kind: 'user', uid: f.uid, name: me(), content: text.slice(0, 2000), at: f.serverTimestamp() })
+      .catch(() => { status.textContent = 'Message not sent. Check your connection.'; });
+  };
+  showState();
 }
 
 // ---------- router ----------
 function route() {
+  roomCleanup?.();
   if ('speechSynthesis' in window) speechSynthesis.cancel();
   const [, page, arg] = (location.hash || '#/').split('/');
   const id = arg ? decodeURIComponent(arg) : '';
@@ -660,6 +839,8 @@ function route() {
   else if (page === 'settings') settingsView();
   else if (page === 'groups') groupsView();
   else if (page === 'group') groupChatView(id);
+  else if (page === 'rooms') roomsView();
+  else if (page === 'room') roomView(id);
   else galleryView();
   window.scrollTo(0, 0);
 }
