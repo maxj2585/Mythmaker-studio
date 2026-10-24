@@ -223,6 +223,8 @@ function galleryView(tab = 'all') {
     <h1>Characters that live in your browser</h1>
     <p class="lead">Give a character a personality, a backstory and a voice, then talk with them. The AI runs on your own device, so nothing you write leaves it.</p>
     <div class="row"><a class="btn primary" href="#/create">Create a character</a><button id="importBtn">Import a character file</button><input id="importFile" type="file" accept="application/json" hidden></div>
+    <form id="linkForm" class="row" style="margin-top:10px"><input id="linkInput" type="url" inputmode="url" placeholder="Paste a share link or a link to a .mythmaker.json file" style="flex:1;min-width:220px" required><button type="submit">Import from link</button></form>
+    <p id="linkStatus" class="lead" role="status" aria-live="polite" style="font-size:.95rem;margin:6px 0 0"></p>
     ${hasWebGPU() ? '' : '<p class="notice">This browser has no WebGPU, so chat will not run here. Try current Chrome or Edge on a computer, or Safari 26 or later.</p>'}
     <input id="search" type="search" placeholder="Search characters by name, tag or vibe" style="margin-top:18px">
     <div class="tabs" role="tablist">
@@ -252,6 +254,71 @@ function galleryView(tab = 'all') {
       saveCharacter(c); location.hash = `#/chat/${c.id}`;
     } catch { alert('That file is not a Mythmaker character.'); }
   };
+  $view.querySelector('#linkForm').onsubmit = async (e) => {
+    e.preventDefault();
+    const status = $view.querySelector('#linkStatus');
+    const btn = e.target.querySelector('button');
+    btn.disabled = true; status.textContent = 'Importing…';
+    try {
+      const ids = await importFromLink($view.querySelector('#linkInput').value);
+      status.textContent = ids.length > 1 ? `Imported ${ids.length} characters.` : '';
+      location.hash = ids.length > 1 ? '#/' : `#/chat/${ids[0]}`;
+      if (ids.length > 1) galleryView('mine');
+    } catch (err) { console.error(err); status.textContent = err.message || 'That link could not be imported.'; }
+    finally { btn.disabled = false; }
+  };
+}
+
+// Turn the "view" links people copy from file hosts into direct download links.
+function directFileUrl(raw) {
+  const url = new URL(raw.trim());
+  const h = url.hostname;
+  if (h === 'github.com') {
+    const m = url.pathname.match(/^\/([^/]+)\/([^/]+)\/(?:blob|raw)\/(.+)$/);
+    if (m) return `https://raw.githubusercontent.com/${m[1]}/${m[2]}/${m[3]}`;
+  }
+  if (h === 'gist.github.com') {
+    const m = url.pathname.match(/^\/([^/]+)\/([0-9a-f]+)/i);
+    if (m) return `https://gist.githubusercontent.com/${m[1]}/${m[2]}/raw`;
+  }
+  if (h.endsWith('dropbox.com')) {
+    url.hostname = 'dl.dropboxusercontent.com'; url.searchParams.delete('dl'); return url.href;
+  }
+  if (h === 'drive.google.com') {
+    const id = url.pathname.match(/\/d\/([^/]+)/)?.[1] || url.searchParams.get('id');
+    if (id) return `https://drive.usercontent.google.com/download?id=${encodeURIComponent(id)}&export=download`;
+  }
+  return url.href;
+}
+
+// Import from a Mythmaker share link, or from a link to a character file
+// (one character, an array, or { characters: [...] }). Returns the new ids.
+async function importFromLink(input) {
+  const text = (input || '').trim();
+  const share = text.match(/#\/import\/([^\s#?]+)/);
+  if (share) {
+    const c = { ...cleanCharacter(b64decode(share[1])), id: newId() };
+    saveCharacter(c); return [c.id];
+  }
+  let href;
+  try { href = directFileUrl(text); } catch { throw new Error('That does not look like a link. Paste the full address, starting with https://'); }
+  let res;
+  try { res = await fetch(href, { mode: 'cors' }); }
+  catch { throw new Error(navigator.onLine === false ? 'You are offline. Linking to a file needs an internet connection.' : 'That site would not let the file be read from here. Try a GitHub, Gist or Dropbox link, or download the file and use Import a character file.'); }
+  if (!res.ok) throw new Error(`That link answered with an error (${res.status}). Check that the file is shared publicly.`);
+  let data;
+  try { data = JSON.parse(await res.text()); }
+  catch { throw new Error('That link opened something other than a Mythmaker character file.'); }
+  const list = Array.isArray(data) ? data : Array.isArray(data.characters) ? data.characters : [data.character || data];
+  const ids = [];
+  for (const item of list) {
+    const raw = item && typeof item === 'object' ? (item.character || item) : null;
+    if (!raw || typeof raw !== 'object' || !raw.name) continue;
+    const c = { ...cleanCharacter(raw), id: newId() };
+    saveCharacter(c); ids.push(c.id);
+  }
+  if (!ids.length) throw new Error('That file has no Mythmaker characters in it.');
+  return ids;
 }
 
 function editorView(id) {
