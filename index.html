@@ -7,6 +7,11 @@
 <meta name="description" content="Create AI characters with personality, backstory and voice, then chat with them. The AI runs on your device with WebLLM.">
 <meta name="theme-color" content="#14111f">
 <link rel="stylesheet" href="./style.css">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Mythmaker">
 </head>
 <body>
 <header class="top">
@@ -22,5 +27,6 @@
 <main id="view" tabindex="-1"></main>
 <footer class="foot">Your characters and private chats stay on this device; shared Rooms are stored with Firebase. The AI model runs locally through <a href="https://github.com/mlc-ai/web-llm" target="_blank" rel="noopener">WebLLM</a> (Apache-2.0).</footer>
 <script type="module" src="./app.js"></script>
+<script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch((e) => console.error('Offline cache unavailable.', e));</script>
 </body>
 </html>
